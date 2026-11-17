@@ -1,0 +1,11 @@
+{
+  "domain": "ariston_deos",
+  "name": "Ariston Deos",
+  "version": "0.1.0",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/CaputoDavide93/Ariston-Deos-Home-Assistant",
+  "issue_tracker": "https://github.com/CaputoDavide93/Ariston-Deos-Home-Assistant/issues",
+  "iot_class": "cloud_polling",
+  "requirements": ["midea-beautiful-air==0.10.7"]
+}

@@ -1,0 +1,58 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ariston Clima Account",
+        "description": "Sign in with the account you use in the Ariston Clima app.",
+        "data": {"region": "Region", "account": "Email", "password": "Password"}
+      },
+      "device": {
+        "title": "Choose Dehumidifier",
+        "data": {"appliance_id": "Dehumidifier"}
+      },
+      "reauth_confirm": {
+        "title": "Sign In Again",
+        "description": "The cloud refused the saved password. Enter the current one.",
+        "data": {"password": "Password"}
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the Ariston cloud",
+      "invalid_auth": "Email or password was refused. Try the other region if this is right",
+      "no_devices": "No dehumidifier found on this account"
+    },
+    "abort": {
+      "already_configured": "This dehumidifier is already set up",
+      "reauth_successful": "Signed in again"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ariston Deos Options",
+        "data": {"scan_interval": "Update interval in seconds (60 to 900)"}
+      }
+    }
+  },
+  "selector": {
+    "region": {"options": {"eu": "Europe", "us": "United States"}}
+  },
+  "entity": {
+    "humidifier": {
+      "dehumidifier": {
+        "state_attributes": {
+          "mode": {
+            "state": {
+              "set": "Target Humidity",
+              "continuous": "Continuous",
+              "smart": "Smart",
+              "dry": "Clothes Drying"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {"current_humidity": {"name": "Current Humidity"}},
+    "binary_sensor": {"tank_full": {"name": "Tank Full"}}
+  }
+}

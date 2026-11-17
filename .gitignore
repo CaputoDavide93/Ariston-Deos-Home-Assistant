@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs (a directory or a symlink)
+.venv
+venv/
+
+# Token and key files written by scripts/probe.py --save-keys
+*.keys
+
+# OS / editor
+.DS_Store
+.vscode/
+*.code-workspace
+
+# Secrets and credentials: never commit
+.env
+.env.*
+!.env.example
+secrets.yaml
+secrets.yml
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
+google-services.json
+GoogleService-Info.plist
