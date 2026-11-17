@@ -47,10 +47,10 @@ What the integration exposes as entities is not documented here until it has run
 You need Home Assistant 2026.9 or newer and your Ariston Clima app login.
 
 1. **Run the probe** (below). It costs nothing and changes nothing.
-2. **Install with HACS:** **⋮, Custom repositories**, add this repository's GitHub URL with the type **Integration**, download **Ariston Deos**, restart Home Assistant. Or copy `custom_components/ariston_deos/` into `config/custom_components/` and restart.
+2. **Install manually:** copy `custom_components/ariston_deos/` into `config/custom_components/` and restart Home Assistant.
 3. **Add it:** **Settings, Devices and services, Add integration, Ariston Deos.**
 
-The repository is private, so HACS can only reach it from an account that can see it.
+The repository is private and HACS cannot install from a private repository, so manual copy is the only route until it is public.
 
 ---
 
@@ -60,13 +60,13 @@ The repository is private, so HACS can only reach it from an account that can se
 
 ```bash
 pip install midea-beautiful-air        # the probe's only dependency
-export ARISTON_EMAIL=you@example.com   # or leave unset and type it at the prompt
+export ARISTON_EMAIL=you@example.com   # or leave unset: the prompt is hidden
 export ARISTON_PASSWORD=...            # or leave unset: the prompt is hidden
 python3 scripts/probe.py               # add --region EU or --region US for one server
 python3 scripts/probe.py --save-keys ./deos.keys   # also keep the token and key
 ```
 
-The login never goes on the command line, on screen or onto disk. The probe never sends a
+The login never goes on the command line, on screen or onto disk. Unset variables are asked for at hidden prompts (email and password), and errors print only the exception class and a numeric code. `--save-keys` writes a new mode 600 file, refuses symlinks, and refuses an existing file unless you add `--force`. The probe never sends a
 set command. It runs these steps for the EU server, then the US server, one line each with
 PASS or FAIL and the reason:
 
@@ -99,7 +99,7 @@ Every read and command goes from Home Assistant to the Midea cloud and back to t
 Details, and what comes from the library's source, are in [docs/how-it-works.md](docs/how-it-works.md). Limits:
 
 - It needs the internet and the Midea servers up.
-- It polls, so changes appear on the next poll.
+- It polls, so changes appear on the next poll (default 300 seconds, range 60 to 900).
 - The API is unofficial: if Midea changes it, this breaks until the library catches up.
 
 ---

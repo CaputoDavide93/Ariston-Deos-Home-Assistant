@@ -7,9 +7,9 @@ the Midea family app and the local token and key cannot be fetched for it.
 
 from __future__ import annotations
 
-import threading
-
 import logging
+import re
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -28,6 +28,122 @@ FAN_SPEEDS: dict[str, int] = {"low": 40, "medium": 60, "high": 80}
 MIN_HUMIDITY = 35
 MAX_HUMIDITY = 85
 HUMIDITY_STEP = 5
+
+
+# --- Log scrubbing for the library's own loggers ------------------------------
+#
+# midea_beautiful logs appliance ids, tokens, keys and raw packets at DEBUG from
+# loggers we do not own. A logger filter on the parent does not see records of
+# child loggers, so the filter is also run from the record factory, which every
+# record passes through, including those of loggers created later. It works
+# from import time, before the first request.
+
+_LIB_LOGGER = "midea_beautiful"
+_SECRETS: set[str] = set()
+_MASK = "***"
+_PATTERNS = [
+    # raw packets: b'...' / b"..." / bytearray(b'...')
+    (re.compile(r"""\b(?:bytearray\()?b(['"]).*?(?<!\\)\1\)?""", re.S), "<packet>"),
+    # key: value pairs that carry credentials
+    (
+        re.compile(
+            r"""(?i)(['"]?(?:token|key|password|passwd|secret|sign|accesstoken|"""
+            r"""accountname|account|loginaccount|session\w*|udpid|sn|mac)['"]?\s*[:=]\s*)"""
+            r"""(?:'[^']*'|"[^"]*"|[^\s,}\]]+)"""
+        ),
+        r"\1" + _MASK,
+    ),
+    (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), _MASK),  # e-mail account
+    (re.compile(r"\b[0-9A-Fa-f]{16,}\b"), _MASK),  # keys, tokens, hex packets
+    (re.compile(r"\b\d{6,}\b"), _MASK),  # appliance ids
+    (re.compile(r"\b[A-Za-z0-9+/_-]{24,}={0,2}"), _MASK),  # base64-ish blobs
+]
+
+
+def register_secret(value: Any) -> None:
+    """Make the log filter mask an exact string (account, password)."""
+    text = str(value or "")
+    if len(text) >= 3:
+        _SECRETS.add(text)
+
+
+def scrub(text: str) -> str:
+    """Mask anything in a library log line that could identify or unlock."""
+    for secret in _SECRETS:
+        text = text.replace(secret, _MASK)
+    for pattern, repl in _PATTERNS:
+        text = pattern.sub(repl, text)
+    return text
+
+
+class _MideaLogFilter(logging.Filter):
+    """Rewrite midea_beautiful records in place so no handler sees raw data."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != _LIB_LOGGER and not record.name.startswith(_LIB_LOGGER + "."):
+            return True
+        try:
+            message = record.getMessage()
+        except Exception:  # noqa: BLE001 a bad format string must not leak args
+            message = str(record.msg)
+        record.msg = scrub(message)
+        record.args = None
+        # Tracebacks can embed packets or ids: keep only the exception name.
+        if record.exc_info:
+            exc = record.exc_info[1]
+            record.msg += f" ({type(exc).__name__})"
+        record.exc_info = None
+        record.exc_text = None
+        return True
+
+
+_LOG_FILTER = _MideaLogFilter()
+
+
+def install_log_filter() -> None:
+    """Install the scrubber once. Safe to call any number of times."""
+    logging.getLogger(_LIB_LOGGER).addFilter(_LOG_FILTER)  # no-op if present
+    factory = logging.getLogRecordFactory()
+    if getattr(factory, "_ariston_deos_scrub", False):
+        return
+
+    def scrubbing_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = factory(*args, **kwargs)
+        _LOG_FILTER.filter(record)
+        return record
+
+    scrubbing_factory._ariston_deos_scrub = True  # type: ignore[attr-defined]
+    logging.setLogRecordFactory(scrubbing_factory)
+
+
+install_log_filter()
+
+
+# Offsets in the status payload the library hands to process_response().
+_MIN_STATUS_LEN = 19  # the parser reads up to index 18
+_TANK_WARNING_BYTE = 15
+
+
+def _apply_keeping_tank_warning(dev: Any, cloud: Any, warning: int) -> None:
+    """dev.apply(), but the write carries the tank warning level the device reported.
+
+    The library parses tank_warning_level from the status reply yet does not
+    keep it on the appliance, and its set command then writes 0. Wrap the
+    command builder for this one call only; the library is not modified.
+    """
+    state = dev.state
+    build = state.apply_command
+
+    def build_with_warning() -> Any:
+        cmd = build()
+        cmd.tank_warning_level = warning
+        return cmd
+
+    state.apply_command = build_with_warning
+    try:
+        dev.apply(cloud)
+    finally:
+        del state.apply_command  # back to the class method
 
 
 class AristonCloudError(Exception):
@@ -66,6 +182,23 @@ def redact(value: Any) -> str:
     return "***" + text[-4:] if len(text) > 4 else "***"
 
 
+def _is_dehumidifier_type(value: Any) -> bool:
+    """True for 0xa1 in any spelling: "0xA1", "a1", 161 or the signed byte -95."""
+    text = str(value).strip().lower()
+    try:
+        if text.startswith(("0x", "-0x")):
+            number = int(text, 16)
+        elif re.fullmatch(r"-?\d+", text):
+            number = int(text)
+        else:
+            number = int(text, 16)
+    except ValueError:
+        return False
+    if number < 0:
+        number += 256  # signed byte
+    return number == 0xA1
+
+
 def _classify(exc: Exception) -> AristonCloudError:
     """Map any library or network exception to our own, without importing it."""
     names = {c.__name__ for c in type(exc).__mro__}
@@ -101,6 +234,8 @@ class AristonDeosApi:
     ) -> None:
         if region not in REGION_APPS:
             raise ValueError("Unknown region")
+        register_secret(account)
+        register_secret(password)
         self._region = region
         self._account = account
         self._password = password
@@ -146,8 +281,7 @@ class AristonDeosApi:
         items = self._call(lambda c: c.list_appliances(True))
         found = []
         for item in items or []:
-            kind = str(item.get("type", "")).lower()
-            if kind in ("0xa1", "a1", "161"):
+            if _is_dehumidifier_type(item.get("type", "")):
                 found.append(
                     DeosDevice(str(item["id"]), item.get("name") or "Ariston Deos")
                 )
@@ -172,11 +306,27 @@ class AristonDeosApi:
             online=bool(getattr(dev, "_online", True)),
         )
 
+    @staticmethod
+    def _fresh_refresh(dev: Any, cloud: Any) -> int:
+        """Refresh and prove a status payload really arrived.
+
+        The library ignores an unsupported or empty reply and leaves the old
+        (or default) values in place, so a bare refresh() proves nothing.
+        Clear the raw payload first and require a new one afterwards.
+        Returns the tank warning level the device reported.
+        """
+        dev.state.latest_data = b""
+        dev.refresh(cloud)
+        data = getattr(dev.state, "latest_data", b"")
+        if not isinstance(data, (bytes, bytearray)) or len(data) < _MIN_STATUS_LEN:
+            raise AristonCloudError("Cloud returned no usable status")
+        return int(data[_TANK_WARNING_BYTE])
+
     def query_state(self, appliance_id: str) -> DeosState:
         """Send the status command through the cloud and parse the reply."""
         dev = self._device(appliance_id)
         _LOGGER.debug("Query %s", redact(appliance_id))
-        self._call(lambda c: dev.refresh(c))
+        self._call(lambda c: self._fresh_refresh(dev, c))
         return self._read(dev)
 
     def set(self, appliance_id: str, **changes: Any) -> DeosState:
@@ -198,7 +348,7 @@ class AristonDeosApi:
         _LOGGER.debug("Set %s keys=%s", redact(appliance_id), sorted(changes))
 
         def run(cloud: Any) -> None:
-            dev.refresh(cloud)
+            warning = self._fresh_refresh(dev, cloud)
             st = dev.state
             if "power" in changes:
                 st.running = bool(changes["power"])
@@ -208,7 +358,7 @@ class AristonDeosApi:
                 st.target_humidity = int(changes["target_humidity"])
             if "fan_speed" in changes:
                 st.fan_speed = int(changes["fan_speed"])
-            dev.apply(cloud)
+            _apply_keeping_tank_warning(dev, cloud, warning)
 
         self._call(run)
         return self._read(dev)

@@ -48,16 +48,32 @@ class UdpTests(unittest.TestCase):
 
 
 class ErrorTextTests(unittest.TestCase):
-    def test_carries_code_not_secret(self):
+    def test_code_only_never_message(self):
         class Boom(Exception):
             error_code = 9999
-            message = "system error for me@example.com"
+            message = "token abc123 for me@example.com id 99887766"
 
-        probe._SECRETS[:] = ["me@example.com"]
-        text = probe.error_text(Boom())
-        probe._SECRETS[:] = []
-        self.assertIn("9999", text)
-        self.assertNotIn("me@example.com", text)
+        text = probe.error_text(Boom("secret-key-xyz"))
+        self.assertEqual(text, "Boom (code 9999)")
+
+    def test_invalid_code_dropped(self):
+        class Bad(Exception):
+            error_code = "tok-123"
+
+        self.assertEqual(probe.error_text(Bad("x")), "Bad")
+        Bad.error_code = True
+        self.assertEqual(probe.error_text(Bad("x")), "Bad")
+
+
+class StatusTests(unittest.TestCase):
+    def test_default_state_is_not_a_status(self):
+        class State:
+            latest_data = b""
+
+        self.assertFalse(probe.status_received(State()))
+        State.latest_data = b"\xc8\x01"
+        self.assertTrue(probe.status_received(State()))
+        self.assertFalse(probe.status_received(State(), responses_ok=False))
 
 
 class VerdictTests(unittest.TestCase):
@@ -83,12 +99,52 @@ class VerdictTests(unittest.TestCase):
         self.assertIn("cloud status WORKS", out)
 
 
+class DiscoveryTests(unittest.TestCase):
+    def test_failed_discovery_is_undetermined(self):
+        out = " ".join(probe.verdict([probe.RegionResult("EU", login=True, discovery_failed=True)]))
+        self.assertIn("undetermined", out)
+        self.assertNotIn("is on the account", out)
+
+
 class KeyFileTests(unittest.TestCase):
     def test_mode_600(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "x.keys")
             probe.write_keys(path, "tok", "key")
             self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+
+    def test_existing_file_refused_without_force(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "x.keys")
+            with open(path, "w") as h:
+                h.write("old")
+            os.chmod(path, 0o644)
+            with self.assertRaises(FileExistsError):
+                probe.write_keys(path, "tok", "key")
+            probe.write_keys(path, "tok", "key", force=True)
+            self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+            self.assertIn("token=tok", open(path).read())
+
+    def test_symlink_refused_even_with_force(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = os.path.join(d, "t")
+            link = os.path.join(d, "l")
+            open(target, "w").close()
+            os.symlink(target, link)
+            with self.assertRaises(OSError):
+                probe.write_keys(link, "tok", "key", force=True)
+            self.assertEqual(open(target).read(), "")
+
+
+class CredentialTests(unittest.TestCase):
+    def test_prompts_are_hidden(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+            probe.getpass, "getpass", side_effect=["a@b.c", "pw"]
+        ) as gp, mock.patch("builtins.input", side_effect=AssertionError):
+            self.assertEqual(probe.get_credentials(), ("a@b.c", "pw"))
+            self.assertEqual(gp.call_count, 2)
 
 
 if __name__ == "__main__":

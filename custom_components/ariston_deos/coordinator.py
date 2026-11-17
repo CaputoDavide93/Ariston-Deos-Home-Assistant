@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import AristonCloudAuthError, AristonCloudError, AristonDeosApi, DeosState
@@ -53,8 +53,13 @@ class AristonDeosCoordinator(DataUpdateCoordinator[DeosState]):
                 lambda: self.api.set(self.appliance_id, **changes)
             )
         except AristonCloudAuthError as err:
-            raise ConfigEntryAuthFailed("Login was refused") from err
+            # A service call is not a poll: ConfigEntryAuthFailed would not
+            # start reauth from here, so start it ourselves.
+            self.last_update_success = False
+            self.async_update_listeners()
+            self.config_entry.async_start_reauth(self.hass)
+            raise HomeAssistantError("Ariston login was refused, sign in again") from err
         except AristonCloudError as err:
-            raise UpdateFailed(str(err)) from err
+            raise HomeAssistantError(f"Ariston change failed: {err}") from err
         self.async_set_updated_data(state)
         await self.async_request_refresh()

@@ -35,6 +35,20 @@ class FakeState:
     fan_speed = 40
     tank_full = False
     _error = 0
+    latest_data = b""
+
+    def apply_command(self):
+        return FakeCmd()
+
+
+class FakeCmd:
+    tank_warning_level = 0
+
+
+def status_payload(warning=0):
+    p = bytearray(22)
+    p[15] = warning
+    return bytes(p)
 
 
 class FakeDevice:
@@ -44,14 +58,20 @@ class FakeDevice:
         self.refreshed = 0
         self.applied = 0
         self.fail = []
+        self.warning = 75
+        self.reply = True  # False: library ignores the reply, keeps old data
+        self.sent_cmds = []
 
     def refresh(self, cloud):
         if self.fail:
             raise self.fail.pop(0)
         self.refreshed += 1
+        if self.reply:
+            self.state.latest_data = status_payload(self.warning)
 
     def apply(self, cloud):
         self.applied += 1
+        self.sent_cmds.append(self.state.apply_command())
 
 
 class FakeCloud:
@@ -135,6 +155,42 @@ class ApiLogicTests(unittest.TestCase):
             client.login()
         self.assertNotIn("secret-leak", str(ctx.exception))
 
+    def test_unsupported_reply_is_an_error_not_cached_success(self):
+        client, dev, _ = make()
+        dev.reply = False
+        with self.assertRaises(api.AristonCloudError):
+            client.query_state(FAKE_ID)
+        with self.assertRaises(api.AristonCloudError):
+            client.set(FAKE_ID, power=True)
+        self.assertEqual(dev.applied, 0)  # nothing written from default state
+
+    def test_stale_payload_from_earlier_poll_does_not_count(self):
+        client, dev, _ = make()
+        client.query_state(FAKE_ID)  # good poll leaves latest_data behind
+        dev.reply = False
+        with self.assertRaises(api.AristonCloudError):
+            client.query_state(FAKE_ID)
+
+    def test_set_keeps_reported_tank_warning_level(self):
+        client, dev, _ = make()
+        client.set(FAKE_ID, power=True)
+        self.assertEqual(dev.sent_cmds[0].tank_warning_level, 75)
+        self.assertNotIn("apply_command", vars(dev.state))  # wrapper removed
+
+    def test_discovery_accepts_every_spelling_of_a1(self):
+        for kind in ("0xA1", "a1", "A1", "161", 161, "-95", -95, "0xa1"):
+            self.assertTrue(api._is_dehumidifier_type(kind), kind)
+        for kind in ("0xac", "ac", "172", "-84", "", None, "zz", "417"):
+            self.assertFalse(api._is_dehumidifier_type(kind), kind)
+
+    def test_discovery_finds_signed_type(self):
+        client, _, _ = make()
+        client._connect = lambda *a: type(
+            "C", (), {"list_appliances": lambda self, f=False: [
+                {"id": FAKE_ID, "name": "Deos", "type": "-95"}]}
+        )()
+        self.assertEqual([d.appliance_id for d in client.list_dehumidifiers()], [FAKE_ID])
+
     def test_redact_keeps_last_four(self):
         self.assertEqual(api.redact(FAKE_ID), "***9012")
         self.assertEqual(api.redact("ab"), "***")
@@ -142,6 +198,62 @@ class ApiLogicTests(unittest.TestCase):
     def test_unknown_region(self):
         with self.assertRaises(ValueError):
             api.AristonDeosApi("xx", "a", "b")
+
+
+class LogFilterTests(unittest.TestCase):
+    def _capture(self, name, msg, *args, **kw):
+        import logging
+
+        records = []
+
+        class H(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        log = logging.getLogger(name)
+        h = H()
+        old = log.level
+        log.setLevel(logging.DEBUG)
+        log.addHandler(h)
+        try:
+            log.debug(msg, *args, **kw)
+        finally:
+            log.removeHandler(h)
+            log.setLevel(old)
+        return records[0].getMessage(), records[0]
+
+    def test_child_logger_record_is_masked_before_first_request(self):
+        api.register_secret("someone@example.invalid")
+        api.register_secret("fake-pass")
+        msg, rec = self._capture(
+            "midea_beautiful.lan",
+            "Packet for %s data: %s acct=%s %s",
+            FAKE_ID, b"\x5a\x5a\x01\x11" + b"\x00" * 8,
+            "someone@example.invalid", {"token": "abcdef0123456789abcdef", "id": FAKE_ID},
+        )
+        for leak in (FAKE_ID, "x5a", "someone@example", "abcdef0123456789"):
+            self.assertNotIn(leak, msg)
+        self.assertIsNone(rec.args)
+
+    def test_traceback_is_dropped(self):
+        try:
+            raise OSError(FAKE_ID)
+        except OSError:
+            msg, rec = self._capture("midea_beautiful.cloud", "boom", exc_info=True)
+        self.assertIsNone(rec.exc_info)
+        self.assertNotIn(FAKE_ID, msg)
+
+    def test_other_loggers_untouched_and_install_idempotent(self):
+        import logging
+
+        api.install_log_filter()
+        api.install_log_filter()
+        msg, _ = self._capture("other.logger", "id %s", FAKE_ID)
+        self.assertIn(FAKE_ID, msg)
+        f = logging.getLogger("midea_beautiful").filters
+        self.assertEqual(f.count(api._LOG_FILTER), 1)
+        factory = logging.getLogRecordFactory()
+        self.assertFalse(getattr(factory.__closure__[0].cell_contents, "_ariston_deos_scrub", False))
 
 
 @unittest.skipUnless(HAVE_LIB, "midea-beautiful-air not installed")
@@ -194,6 +306,24 @@ class LibraryBytesTests(unittest.TestCase):
         self.assertEqual(int.from_bytes(pkt[20:28], "little"), int(FAKE_ID))
         self.assertEqual(pkt[40:43], bytes([0xAA, 0x20, 0xA1]))  # unencrypted body
         self.assertEqual(pkt[50], 0x41)  # status request
+
+    def test_real_library_keeps_tank_warning_on_power_only_write(self):
+        p = bytearray(self.reply(run=0))
+        p[10 + 15] = 75  # 10 header bytes, then payload byte 15
+        cloud = self.Cloud(bytes(p))
+        client = api.AristonDeosApi("eu", "a@example.invalid", "x", connect=lambda *a: cloud)
+        client.set(FAKE_ID, power=True)
+        body = cloud.sent[1][40:-16]
+        self.assertEqual(body[23], 75)
+
+    def test_real_library_unsupported_reply_raises(self):
+        bad = bytearray(self.reply())
+        bad[9] = 9  # extended reply type the library ignores
+        cloud = self.Cloud(bytes(bad))
+        client = api.AristonDeosApi("eu", "a@example.invalid", "x", connect=lambda *a: cloud)
+        with self.assertRaises(api.AristonCloudError):
+            client.set(FAKE_ID, power=True)
+        self.assertEqual(len(cloud.sent), 1)  # no write
 
     def test_set_packet_carries_changes(self):
         client, cloud = self.make(run=0, mode=1, target=50)

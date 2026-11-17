@@ -61,19 +61,21 @@ def udp_ids(appliance_id: int | str) -> list[str]:
 
 
 def error_text(exc: BaseException) -> str:
-    """One short line: exception class and the library's error code, never a credential."""
+    """One short line: the exception class and a validated numeric code, nothing else.
+
+    Server messages and exception text can hold tokens, keys, appliance ids or the
+    login, so they are never printed.
+    """
     code = getattr(exc, "error_code", None)
-    message = str(getattr(exc, "message", "") or exc)
-    # The library's messages carry the Midea error text, not the login, but be safe.
-    for secret in _SECRETS:
-        if secret and secret in message:
-            message = message.replace(secret, "***")
-    message = " ".join(message.split())[:160]
-    suffix = f" (code {code})" if code is not None else ""
-    return f"{type(exc).__name__}: {message}{suffix}"
+    name = type(exc).__name__
+    if isinstance(code, int) and not isinstance(code, bool) and 0 <= code <= 999999:
+        return f"{name} (code {code})"
+    return name
 
 
-_SECRETS: list[str] = []
+def status_received(state: object, responses_ok: bool = True) -> bool:
+    """True only if a real status payload arrived, not the library's default values."""
+    return bool(responses_ok and getattr(state, "latest_data", b""))
 
 
 @dataclass
@@ -83,6 +85,7 @@ class RegionResult:
     dehumidifiers: int = 0
     token: bool = False
     status: bool = False
+    discovery_failed: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -98,6 +101,14 @@ def verdict(results: list[RegionResult]) -> list[str]:
     names = " and ".join(r.region for r in logged)
     lines.append(f"VERDICT: login works on {names}.")
     holding = [r for r in logged if r.dehumidifiers]
+    failed = [r for r in logged if r.discovery_failed]
+    if failed and not holding:
+        lines.append(
+            "VERDICT: undetermined. The appliance list could not be read on "
+            + " and ".join(r.region for r in failed)
+            + "; this does not mean there is no dehumidifier. Run again."
+        )
+        return lines
     if not holding:
         lines.append(
             "VERDICT: no dehumidifier (type 0xA1) is on the account in any region "
@@ -136,23 +147,39 @@ def say(step: str, ok: bool, text: str) -> None:
 
 
 def get_credentials() -> tuple[str, str]:
-    email = os.environ.get("ARISTON_EMAIL") or input("Ariston Clima email: ").strip()
+    """Env vars first; otherwise hidden prompts for both, so nothing is echoed."""
+    email = os.environ.get("ARISTON_EMAIL") or getpass.getpass("Ariston Clima email (hidden): ").strip()
     password = os.environ.get("ARISTON_PASSWORD") or getpass.getpass(
         "Ariston Clima password (hidden): "
     )
     return email, password
 
 
-def write_keys(path: str, token: str, key: str) -> None:
-    """Create the file with mode 600 from the start, so it is never world-readable."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
+def write_keys(path: str, token: str, key: str, force: bool = False) -> None:
+    """Write a new 0600 file. Refuses symlinks and, without force, existing files."""
+    if os.path.islink(path):
+        raise OSError("refusing to write through a symlink")
+    if os.path.lexists(path):
+        if not force:
+            raise FileExistsError("file exists; pass --force to replace it")
+        os.unlink(path)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        handle = os.fdopen(fd, "w")
+    except BaseException:
+        os.close(fd)
+        raise
+    with handle:
         handle.write(f"token={token}\nkey={key}\n")
-    os.chmod(path, 0o600)
 
 
 def probe_region(
-    region: str, email: str, password: str, save_keys: str | None
+    region: str,
+    email: str,
+    password: str,
+    save_keys: str | None,
+    force: bool = False,
 ) -> RegionResult:
     from midea_beautiful import connect_to_cloud  # lazy: keeps helpers testable
 
@@ -171,6 +198,7 @@ def probe_region(
     try:
         appliances = cloud.list_appliances(force=True)
     except Exception as exc:  # noqa: BLE001
+        result.discovery_failed = True
         say(step, False, error_text(exc))
         return result
     say(step, True, f"{len(appliances)} appliance(s)")
@@ -208,23 +236,26 @@ def probe_region(
         result.token = True
         say(step, True, f"token and key returned (lengths {len(token)} and {len(key)})")
         if save_keys:
-            write_keys(save_keys, token, key)
-            print(f"        keys written to {save_keys} (mode 600)")
+            try:
+                write_keys(save_keys, token, key, force)
+                print(f"        keys written to {save_keys} (mode 600)")
+            except OSError as exc:
+                say(f"{region} save keys", False, error_text(exc))
     else:
         say(step, False, last_error or "the cloud returned no token for the device")
 
     step = f"{region} cloud status"
     try:
-        from midea_beautiful.appliance import DehumidifierAppliance
-        from midea_beautiful.command import DehumidifierStatusCommand
+        from midea_beautiful.lan import LanDevice
 
-        replies = cloud.appliance_transparent_send(
-            appliance_id, DehumidifierStatusCommand().finalize()
-        )
-        appliance = DehumidifierAppliance(appliance_id, "0xA1")
-        appliance.process_response_ext(replies)
-        if not appliance.latest_data:
-            raise ValueError("the reply held no status payload")
+        # The library's own cloud path wraps the command in the 5A5A envelope.
+        # refresh() only sends the status query, never a set command.
+        device = LanDevice(appliance_id=str(appliance_id), appliance_type="0xA1")
+        device.refresh(cloud)
+        appliance = device.state
+        if not status_received(appliance):
+            say(step, False, "no fresh status payload was received")
+            return result
         result.status = True
         say(
             step,
@@ -242,6 +273,7 @@ def probe_region(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--save-keys", metavar="PATH", help="write token and key here (mode 600)")
+    parser.add_argument("--force", action="store_true", help="replace an existing --save-keys file")
     parser.add_argument("--region", choices=sorted(REGIONS), help="probe one region only")
     args = parser.parse_args(argv)
 
@@ -252,13 +284,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     email, password = get_credentials()
-    _SECRETS.extend([email, password])
     print("Read-only probe: nothing is changed on the device.\n")
     results = []
     for region in REGIONS:
         if args.region and region != args.region:
             continue
-        results.append(probe_region(region, email, password, args.save_keys))
+        results.append(probe_region(region, email, password, args.save_keys, args.force))
         print()
     print("\n".join(verdict(results)))
     return 0 if any(r.status or r.token for r in results) else 1

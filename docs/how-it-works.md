@@ -38,6 +38,6 @@ humidity, target humidity and tank level. It sends no set command.
 ## Limits of the cloud path
 
 - It needs the internet and the Midea servers up. Without them the device is unavailable.
-- It polls; there is no push, so changes show up on the next poll.
+- It polls; there is no push, so changes show up on the next poll (default 300 seconds, range 60 to 900).
 - The library speaks an unofficial API. If Midea changes it, this breaks until the library is updated.
 - Region, app key and login scheme are the library's choices for "Ariston Clima"; none is confirmed for the Deos 16S NET until the probe passes.
