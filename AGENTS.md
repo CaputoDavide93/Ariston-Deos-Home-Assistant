@@ -23,15 +23,15 @@ This repository follows Davide Caputo's house standards. The full spec is
 
 - Centered header: one emoji H1, a **bold** one-line tagline, flat shields.io badges (no `style=`), then `---`.
 - Emoji `##` headings in the canonical order, `---` between sections, a repo tree in a ```` ```text ```` block that matches `git ls-files`.
-- No architecture diagram and no screenshots until they exist.
+- The diagrams in `docs/assets` come from `tools/gen_diagram.py` (`--check` fails when stale). No screenshots of Home Assistant until they exist from a real device.
 - It ends with `---` and then exactly the author footer used in the current README. No star request, no extra lines.
 
 <!-- ── repo-specific notes below this line ─────────────────────────────── -->
 
 ## This repo: Ariston Deos
 
-A Home Assistant custom integration, displayed as **Ariston Deos**, for an Ariston Deos
-16S NET dehumidifier, through the Midea cloud behind the Ariston Clima app.
+A Home Assistant custom integration, displayed as **Ariston Deos**, for Ariston Deos
+dehumidifiers (the owner's is a 16S NET; any type `0xA1` appliance on the account is offered), through the Midea cloud behind the Ariston Clima app.
 
 - **The domain `ariston_deos` must not change.** Entity ids and config entries hang off it.
 - **Never commit credentials.** No Ariston Clima email or password, token, key, session

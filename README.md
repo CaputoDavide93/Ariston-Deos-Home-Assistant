@@ -1,8 +1,10 @@
 <div align="center">
 
+<img src="docs/assets/brand/icon.svg" width="120" alt="Ariston Deos icon: a water drop with a level line across it">
+
 # 💧 Ariston Deos
 
-**Control an Ariston Deos 16S NET dehumidifier from Home Assistant through the Ariston Clima cloud**
+**Ariston Deos dehumidifiers in Home Assistant, through the Ariston Clima cloud**
 
 ![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 ![Home Assistant](https://img.shields.io/badge/Home_Assistant-2026.9-41BDF5?logo=homeassistant&logoColor=white)
@@ -19,12 +21,19 @@
 
 ## 💡 Why it exists
 
-HA Core's Midea integration fails for this device. Its Ariston Clima login works, but the
-token and key call (`/v1/iot/secure/getToken` on `mapp.appsmb.com`, the US server) answers
-code 9999 "system error", so local control is impossible. This integration controls the
-dehumidifier through the cloud instead, using the
+The Ariston Deos dehumidifiers are controlled from the Ariston Clima phone app. Home
+Assistant could not use them: its built-in Midea integration signs in to the
+Ariston Clima account fine, then fails at the token and key call (`/v1/iot/secure/getToken`
+on `mapp.appsmb.com`, the US server) with code 9999 "system error", so local control is
+impossible. Without it a dehumidifier cannot follow the house: run when the air is damp, tell
+someone when the tank is full, or sit in an automation with everything else.
+
+This integration fixes that by going through the cloud instead, using the
 [`midea-beautiful-air`](https://pypi.org/project/midea-beautiful-air/) library (pinned in
-`manifest.json`).
+`manifest.json`). It was written for the Deos range, not for one model: it offers every
+dehumidifier (appliance type `0xA1`) the Ariston Clima account lists, and the entities are
+the same for each. The owner's unit is a Deos 16S NET, the only model it has been aimed at,
+so every other Deos stays unconfirmed until someone runs the probe against one.
 
 First hypothesis to test: the cloud region. The library lists a US server and an EU server
 for Ariston Clima, and the house is in Scotland.
@@ -35,10 +44,41 @@ for Ariston Clima, and the house is in Scotland.
 
 | | Feature | What it does |
 |---|---|---|
+| 🌫️ | Dehumidifier entity | On and off, a target humidity from 35 to 85 percent in steps of 5, and four modes (set, continuous, smart, dry) |
+| 💦 | Current humidity | A sensor with the humidity the device reads, in percent |
+| 🚰 | Tank full | A problem sensor that turns on when the tank is full |
+| 🔑 | Config flow | Pick EU or US, sign in with the Ariston Clima login, choose the dehumidifier. Handles a changed password through reauthentication |
+| ⏱️ | Polling | Cloud polling every 300 seconds by default, 60 to 900 in the options |
 | 🩺 | Probe script | Logs in on the EU then the US server, lists appliances, asks for the local token and key, sends one status query, and prints a verdict. Read-only |
-| ☁️ | Cloud integration | A Home Assistant integration, domain `ariston_deos`, that polls the cloud (`iot_class` is `cloud_polling`) |
 
-What the integration exposes as entities is not documented here until it has run against a real device.
+What each mode number means on a real Deos is not confirmed. The names follow the Midea
+dehumidifier convention and are not verified on a live device.
+
+---
+
+## 🗺️ Architecture
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img src="docs/assets/architecture-light.svg" width="100%" alt="Home Assistant sends a status query or a command to the Ariston Clima cloud, the cloud sends the state back, and passes each message on to the Deos dehumidifier.">
+</picture>
+
+Every read and command goes from Home Assistant to the Midea cloud and back to the device.
+Details, and what comes from the library's source, are in [docs/how-it-works.md](docs/how-it-works.md). Limits:
+
+- It needs the internet and the Midea servers up.
+- It polls, so changes appear on the next poll (default 300 seconds, range 60 to 900).
+- The API is unofficial: if Midea changes it, this breaks until the library catches up.
+
+What a config entry gives Home Assistant:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/entities-dark.svg">
+  <img src="docs/assets/entities-light.svg" width="100%" alt="One Deos becomes a dehumidifier entity with power, target humidity and mode, a current humidity sensor and a tank full problem sensor.">
+</picture>
+
+There are no screenshots of Home Assistant yet: they will be added from a real device once
+the probe has passed.
 
 ---
 
@@ -93,17 +133,6 @@ The probe exits 0 if the token or the status worked, 1 if neither did, 2 if the 
 
 ---
 
-## 🗺️ How the cloud path works
-
-Every read and command goes from Home Assistant to the Midea cloud and back to the device.
-Details, and what comes from the library's source, are in [docs/how-it-works.md](docs/how-it-works.md). Limits:
-
-- It needs the internet and the Midea servers up.
-- It polls, so changes appear on the next poll (default 300 seconds, range 60 to 900).
-- The API is unofficial: if Midea changes it, this breaks until the library catches up.
-
----
-
 ## 📁 Repo structure
 
 ```text
@@ -114,8 +143,11 @@ Ariston-Deos-Home-Assistant/
 ├── scripts/
 │   ├── probe.py            # 🩺 read-only cloud diagnostic
 │   └── test_probe.py       # 🧪 unit tests of the probe's pure parts
+├── tools/
+│   └── gen_diagram.py      # 🔧 draws the two diagrams in docs/assets
 ├── docs/
-│   └── how-it-works.md     # 📚 routes, region hypothesis, limits
+│   ├── how-it-works.md     # 📚 routes, region hypothesis, limits
+│   └── assets/             # 🖼️ diagrams, brand icon, social preview
 ├── .env.example            # ⚙️ the probe's two optional variables
 ├── hacs.json  pyproject.toml  .gitignore
 └── AGENTS.md  CHANGELOG.md  LICENSE  README.md  SECURITY.md
@@ -127,6 +159,7 @@ Ariston-Deos-Home-Assistant/
 
 ```bash
 python3 -m unittest scripts/test_probe.py
+python3 tools/gen_diagram.py --check   # fails if a diagram is stale
 ```
 
 Covers the probe's id masking, appliance-type matching, udp id derivation, error text,
