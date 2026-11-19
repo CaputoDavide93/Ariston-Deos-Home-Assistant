@@ -1,7 +1,6 @@
 {
   "domain": "ariston_deos",
   "name": "Ariston Deos",
-  "version": "0.1.0",
   "codeowners": [
     "@CaputoDavide93"
   ],
@@ -12,5 +11,6 @@
   "issue_tracker": "https://github.com/CaputoDavide93/Ariston-Deos-Home-Assistant/issues",
   "requirements": [
     "midea-beautiful-air==0.10.7"
-  ]
+  ],
+  "version": "0.1.0"
 }
