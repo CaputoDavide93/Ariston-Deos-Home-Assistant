@@ -21,5 +21,5 @@ class AristonDeosEntity(CoordinatorEntity[AristonDeosCoordinator]):
             identifiers={(DOMAIN, coordinator.appliance_id)},
             name="Ariston Deos",
             manufacturer="Ariston",
-            model="Deos 16S NET",
+            model="Deos",
         )

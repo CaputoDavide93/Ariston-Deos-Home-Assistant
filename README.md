@@ -108,9 +108,14 @@ python3 scripts/probe.py               # add --region EU or --region US for one 
 python3 scripts/probe.py --save-keys ./deos.keys   # also keep the token and key
 ```
 
-The login never goes on the command line, on screen or onto disk. Unset variables are asked for at hidden prompts (email and password), and errors print only the exception class and a numeric code. `--save-keys` writes a new mode 600 file, refuses symlinks, and refuses an existing file unless you add `--force`. The probe never sends a
-set command. It runs these steps for the EU server, then the US server, one line each with
-PASS or FAIL and the reason:
+The login never goes on the command line, on screen or onto disk:
+
+- Unset variables are asked for at hidden prompts (email and password).
+- Errors print only the exception class and a numeric code.
+- `--save-keys` writes a new mode 600 file, refuses symlinks, and refuses an existing file unless you add `--force`.
+- It never sends a set command.
+
+It runs these steps for the EU server, then the US server, one line each with PASS or FAIL and the reason:
 
 | Step | What it does |
 |---|---|
@@ -118,8 +123,6 @@ PASS or FAIL and the reason:
 | Appliances | Lists type, name and the id masked to its last 4 characters; marks dehumidifiers (type `0xA1`) |
 | Local token | Asks for the token and key the way the library does (udp id from the appliance id, little-endian then big-endian). Reports only whether they came back and their lengths. With `--save-keys PATH` writes them to PATH with mode 600 and prints the path |
 | Cloud status | One status query through `appliance_transparent_send`; prints power, mode (raw number), humidity, target and tank |
-
-Errors print the library's error code, never a credential.
 
 ### Reading the verdict
 
@@ -160,12 +163,12 @@ Ariston-Deos-Home-Assistant/
 ## 🧪 Testing
 
 ```bash
-python3 -m unittest scripts/test_probe.py
-python3 tools/gen_diagram.py --check   # fails if a diagram is stale
+python3 -m unittest scripts/test_probe.py              # the probe's pure parts
+python3 -m unittest discover -s tests -t .             # the integration (some tests skip without Home Assistant)
+python3 tools/gen_diagram.py --check                   # fails if a diagram is stale
 ```
 
-Covers the probe's id masking, appliance-type matching, udp id derivation, error text,
-verdict logic and the mode of the key file. The integration's own tests live in `tests/`.
+The probe tests cover id masking, appliance-type matching, udp id derivation, error text, verdict logic and the key file's mode. The integration tests cover the API wrapper, the presets and the coordinator.
 
 ---
 
