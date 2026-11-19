@@ -44,6 +44,7 @@ dehumidifiers (the owner's is a 16S NET; any type `0xA1` appliance on the accoun
 - **Verified:** the library's API surface and the udp id derivation, read from its source
   (`midea-beautiful-air` 0.10.7); the probe's pure helpers, by unit tests; the probe's
   udp id matches the library's own function.
+- **Presets** (`PRESETS` in `api.py`, the `button` platform) use the Midea mode numbers 4 laundry, 3 auto, 2 continuous. Unverified on a live Deos; change them only from probe output.
 - **Not verified:** any call against the live cloud, from the probe or the integration;
   that the Deos 16S NET answers the library's dehumidifier status frame; what the mode
   numbers mean on this model. Say "untested against the live cloud" until that changes.

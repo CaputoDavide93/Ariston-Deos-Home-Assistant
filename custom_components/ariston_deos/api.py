@@ -25,6 +25,18 @@ DEHUMIDIFIER_TYPE = "0xa1"
 MODES: dict[int, str] = {1: "set", 2: "continuous", 3: "smart", 4: "dry"}
 FAN_SPEEDS: dict[str, int] = {"low": 40, "medium": 60, "high": 80}
 
+# One-button settings for the household, from the Deos 16S NET manual's four modes:
+# Laundry (mode 4) runs the fan at maximum and sets humidity by itself, Auto (3) holds
+# 45 to 55 percent by the room temperature, Continuous (2) dries at full power until the
+# tank is full. The mode numbers are the Midea convention, NOT verified on a live Deos;
+# the probe must confirm them before these are trusted.
+PRESETS: dict[str, dict[str, Any]] = {
+    "laundry": {"power": True, "mode": 4},
+    "everyday": {"power": True, "mode": 3},
+    "boost": {"power": True, "mode": 2},
+    "off": {"power": False},
+}
+
 MIN_HUMIDITY = 35
 MAX_HUMIDITY = 85
 HUMIDITY_STEP = 5

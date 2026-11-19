@@ -45,14 +45,16 @@ for Ariston Clima, and the house is in Scotland.
 | | Feature | What it does |
 |---|---|---|
 | 🌫️ | Dehumidifier entity | On and off, a target humidity from 35 to 85 percent in steps of 5, and four modes (set, continuous, smart, dry) |
+| 🧺 | One-button presets | **Laundry** (clothes drying, fan at maximum), **Everyday** (Auto, 45 to 55 percent by the room temperature), **Boost** (continuous, full power until the tank is full) and **Switch Off**. Each switches the unit on and sets its mode in one command, so anyone in the house can use it |
 | 💦 | Current humidity | A sensor with the humidity the device reads, in percent |
 | 🚰 | Tank full | A problem sensor that turns on when the tank is full |
 | 🔑 | Config flow | Pick EU or US, sign in with the Ariston Clima login, choose the dehumidifier. Handles a changed password through reauthentication |
 | ⏱️ | Polling | Cloud polling every 300 seconds by default, 60 to 900 in the options |
 | 🩺 | Probe script | Logs in on the EU then the US server, lists appliances, asks for the local token and key, sends one status query, and prints a verdict. Read-only |
 
-What each mode number means on a real Deos is not confirmed. The names follow the Midea
-dehumidifier convention and are not verified on a live device.
+The presets follow the Deos 16S NET manual's four modes (Standard, Continuous, Auto, Laundry).
+Which mode number the cloud uses for each is the Midea convention and is not verified on a live
+device: the probe has to confirm it before the buttons are trusted.
 
 ---
 
@@ -74,7 +76,7 @@ What a config entry gives Home Assistant:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/entities-dark.svg">
-  <img src="docs/assets/entities-light.svg" width="100%" alt="One Deos becomes a dehumidifier entity with power, target humidity and mode, a current humidity sensor and a tank full problem sensor.">
+  <img src="docs/assets/entities-light.svg" width="100%" alt="One Deos becomes a dehumidifier entity with power, target humidity and mode, four one-button presets, a current humidity sensor and a tank full problem sensor.">
 </picture>
 
 There are no screenshots of Home Assistant yet: they will be added from a real device once

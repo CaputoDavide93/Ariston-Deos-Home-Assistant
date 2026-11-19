@@ -20,4 +20,4 @@ DEFAULT_SCAN_INTERVAL = 300
 MIN_SCAN_INTERVAL = 60
 MAX_SCAN_INTERVAL = 900
 
-PLATFORMS = ["humidifier", "sensor", "binary_sensor"]
+PLATFORMS = ["humidifier", "sensor", "binary_sensor", "button"]

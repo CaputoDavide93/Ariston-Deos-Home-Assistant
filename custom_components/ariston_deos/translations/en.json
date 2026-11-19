@@ -52,6 +52,12 @@
         }
       }
     },
+    "button": {
+      "preset_laundry": {"name": "Laundry"},
+      "preset_everyday": {"name": "Everyday"},
+      "preset_boost": {"name": "Boost"},
+      "preset_off": {"name": "Switch Off"}
+    },
     "sensor": {"current_humidity": {"name": "Current Humidity"}},
     "binary_sensor": {"tank_full": {"name": "Tank Full"}}
   }

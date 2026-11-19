@@ -240,19 +240,21 @@ def architecture(scheme):
 
 
 def entities(scheme):
-    k = Canvas(1180, 400, scheme,
-               "The integration turns one Deos dehumidifier into a dehumidifier entity, a current humidity sensor and a tank full problem sensor.")
-    W, H = 300, 84
-    ys = [28, 132, 236]
+    k = Canvas(1180, 440, scheme,
+               "The integration turns one Deos dehumidifier into a dehumidifier entity, a current humidity sensor, a tank full problem sensor and four one-button presets.")
+    W, H = 300, 82
+    ys = [16, 108, 200, 292]
     k.add(
-        k.box(24, 130, 268, 108, "One Deos", ["per config entry", "picked from the account"], icon="wifi", tone="accent"),
+        k.box(24, 158, 268, 108, "One Deos", ["per config entry", "picked from the account"], icon="wifi", tone="accent"),
         k.box(388, ys[0], W, H, "Dehumidifier", ["on, off, target 35 to 85", "set, continuous, smart, dry"], icon="sliders"),
-        k.box(388, ys[1], W, H, "Current Humidity", ["percent, from the device"], icon="pulse"),
-        k.box(388, ys[2], W, H, "Tank Full", ["problem sensor"], icon="alert"),
-        k.edge([(300, 166), (380, ys[0] + H / 2)], label="control"),
-        k.edge([(300, 184), (380, ys[1] + H / 2)], label="read"),
-        k.edge([(300, 202), (380, ys[2] + H / 2)], label="read"),
-        k.footer("Mode names follow the Midea dehumidifier convention and are not verified on a live Deos yet."),
+        k.box(388, ys[1], W, H, "Presets", ["Laundry, Everyday, Boost,", "Switch Off: one tap each"], icon="play"),
+        k.box(388, ys[2], W, H, "Current Humidity", ["percent, from the device"], icon="pulse"),
+        k.box(388, ys[3], W, H, "Tank Full", ["problem sensor"], icon="alert"),
+        k.edge([(300, 184), (380, ys[0] + H / 2)], label="control"),
+        k.edge([(300, 202), (380, ys[1] + H / 2)], label="control"),
+        k.edge([(300, 220), (380, ys[2] + H / 2)], label="read"),
+        k.edge([(300, 238), (380, ys[3] + H / 2)], label="read"),
+        k.footer("Mode names and preset modes follow the Midea convention and are not verified on a live Deos yet."),
     )
     return k.render()
 

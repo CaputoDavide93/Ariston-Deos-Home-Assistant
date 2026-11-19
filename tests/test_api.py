@@ -339,3 +339,20 @@ class LibraryBytesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PresetTests(unittest.TestCase):
+    def test_every_preset_is_a_valid_set_call(self) -> None:
+        for name, changes in api.PRESETS.items():
+            self.assertTrue(set(changes) <= {"power", "mode", "target_humidity", "fan_speed"}, name)
+            if "mode" in changes:
+                self.assertIn(changes["mode"], api.MODES, name)
+            if "target_humidity" in changes:
+                self.assertTrue(api.MIN_HUMIDITY <= changes["target_humidity"] <= api.MAX_HUMIDITY, name)
+
+    def test_the_presets_the_household_needs_exist(self) -> None:
+        self.assertEqual(set(api.PRESETS), {"laundry", "everyday", "boost", "off"})
+        self.assertEqual(api.PRESETS["laundry"]["mode"], 4)  # clothes drying
+        self.assertIs(api.PRESETS["off"]["power"], False)
+        for name in ("laundry", "everyday", "boost"):
+            self.assertIs(api.PRESETS[name]["power"], True, f"{name} must switch the unit on")
