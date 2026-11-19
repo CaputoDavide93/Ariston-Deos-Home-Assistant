@@ -36,7 +36,7 @@ the same for each. The owner's unit is a Deos 16S NET, the only model it has bee
 so every other Deos stays unconfirmed until someone runs the probe against one.
 
 First hypothesis to test: the cloud region. The library lists a US server and an EU server
-for Ariston Clima, and the house is in Scotland.
+for Ariston Clima, and an account may live on either.
 
 ---
 
@@ -92,7 +92,7 @@ You need Home Assistant 2026.9 or newer and your Ariston Clima app login.
 2. **Install manually:** copy `custom_components/ariston_deos/` into `config/custom_components/` and restart Home Assistant.
 3. **Add it:** **Settings, Devices and services, Add integration, Ariston Deos.**
 
-The repository is private and HACS cannot install from a private repository, so manual copy is the only route until it is public.
+HACS: **Custom repositories**, add `https://github.com/CaputoDavide93/Ariston-Deos-Home-Assistant` as an Integration, then download it. Manual copy works too.
 
 ---
 
@@ -142,6 +142,7 @@ The probe exits 0 if the token or the status worked, 1 if neither did, 2 if the 
 
 ```text
 Ariston-Deos-Home-Assistant/
+├── .github/workflows/      # ✅ hassfest, HACS validation, tests
 ├── custom_components/
 │   └── ariston_deos/       # 🧩 the integration
 ├── tests/                  # 🧪 integration tests

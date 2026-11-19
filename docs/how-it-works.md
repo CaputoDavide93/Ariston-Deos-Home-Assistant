@@ -17,7 +17,7 @@ local control is not possible that way. This integration is the cloud fallback.
 ## The region hypothesis
 
 The library knows two Ariston Clima servers: `mapp.appsmb.com` ("Ariston Clima", US) and
-`mapp-eu.appsmb.com` ("Ariston Clima EU"). The house is in Scotland, so the account
+`mapp-eu.appsmb.com` ("Ariston Clima EU"). An account
 may live on the EU server and fail on the US one. `scripts/probe.py` tries EU first, then
 US, to settle it.
 

@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows
 - `button` platform: four one-button presets (Laundry, Everyday, Boost, Switch Off), defined in `PRESETS` in `api.py`. Mode numbers are unverified on a live Deos.
 - `scripts/probe.py`, a read-only diagnostic: logs in to the Ariston Clima cloud on the EU and then the US server, lists the appliances, asks for the local token and key, and sends one status query. It prints a plain verdict.
 - README: why the integration exists, that it covers the Deos range, an architecture diagram and an entities diagram (`tools/gen_diagram.py`), a brand icon and a social preview image.
+- Marketplace readiness: brand icons in `custom_components/ariston_deos/brand/`, `icons.json` for the preset buttons, a code owner and `integration_type` in the manifest, and hassfest, HACS validation and test workflows.
 - Repository scaffolding: README, AGENTS, SECURITY, LICENSE, `hacs.json`.
 
 ### Changed

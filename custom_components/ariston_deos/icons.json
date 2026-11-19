@@ -1,0 +1,10 @@
+{
+  "entity": {
+    "button": {
+      "preset_laundry": {"default": "mdi:tshirt-crew"},
+      "preset_everyday": {"default": "mdi:home"},
+      "preset_boost": {"default": "mdi:fan-speed-3"},
+      "preset_off": {"default": "mdi:power"}
+    }
+  }
+}

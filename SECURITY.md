@@ -2,8 +2,8 @@
 
 ## Reporting a vulnerability
 
-This repository is private. Report a problem to the owner directly, not in a
-public issue.
+Do not open a public issue for a vulnerability. Use GitHub's private vulnerability
+reporting on this repository, or write to caputodav@gmail.com.
 
 ## Data handling
 
