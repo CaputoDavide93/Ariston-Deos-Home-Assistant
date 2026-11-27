@@ -146,6 +146,16 @@ class ApiLogicTests(unittest.TestCase):
         self.assertNotIsInstance(ctx.exception, api.AristonCloudAuthError)
         self.assertEqual(len(connects), 1)
 
+    def test_next_poll_logs_in_afresh_after_a_failed_call(self):
+        client, dev, connects = make()
+        client.login()
+        dev.fail = [OSError("boom")]
+        with self.assertRaises(api.AristonCloudError):
+            client.query_state(FAKE_ID)
+        self.assertEqual(len(connects), 1)
+        client.query_state(FAKE_ID)
+        self.assertEqual(len(connects), 2)
+
     def test_login_failure_mapping(self):
         def bad():
             raise CloudAuthenticationError("secret-leak")

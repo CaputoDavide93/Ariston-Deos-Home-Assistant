@@ -280,6 +280,12 @@ class AristonDeosApi:
         except Exception as exc:  # noqa: BLE001
             err = _classify(exc)
             if not isinstance(err, AristonCloudAuthError):
+                # No retry inside this call (the account must not be hammered),
+                # but drop the session so the next poll starts from a fresh
+                # login. A session that went stale while the unit was off
+                # otherwise failed every poll until Home Assistant restarted.
+                self._cloud = None
+                self._devices.clear()
                 raise err from None
         _LOGGER.debug("Session rejected, logging in again")
         self.login()
